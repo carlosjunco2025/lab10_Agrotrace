@@ -1,73 +1,44 @@
-## ORM Avanzado (Laboratorio 7)
+# 🌾 AgroTrace — Laboratorio 10 (Frontend con React + Vite)
 
-Se amplió el modelo de datos con tres campos nuevos, necesarios para aplicar las técnicas de este laboratorio sobre AgroTrace:
-- `cupo_diario_lotes` (IntegerField) en `FundoProductor` — campo entero a descontar.
-- `estado_evaluacion` (ya existente) en `LoteRecepcionado` — campo de estado (PENDIENTE, EN_PROCESO, PROCESADO).
-- `costo_auditoria` (DecimalField) en `CertificacionLote` — atributo numérico del modelo intermedio N:M.
+Bienvenido al repositorio de la **Semana 10** del proyecto **AgroTrace**, una plataforma web orientada al monitoreo, trazabilidad agrícola y control de fundos productores con recepción de lotes.
 
-### Transacción atómica
-`recepcion_transaccional` registra un `LoteRecepcionado` y descuenta `cupo_diario_lotes` de su `FundoProductor` dentro de una misma `transaction.atomic()`, usando `F()` para el descuento seguro. Si el fundo no tiene cupo disponible, la transacción completa se revierte (rollback probado: 0 cambios en cupo y conteo de lotes).
+---
 
-### Reportes (aggregate / annotate)
-`reporte_general` expone tres reportes en `reporte.html` (hereda de `base.html`):
-- Costo total/promedio de auditorías y cantidad de certificaciones, con `aggregate()` sobre `CertificacionLote`.
-- Producción agrupada por `estado_evaluacion`, con `values().annotate()`.
-- Total de lotes por fundo, con `annotate()` sobre `FundoProductor`.
+## 📋 Descripción del Proyecto
 
-### QuerySet personalizado
-`LoteQuerySet` (en `models.py`) define `pendientes()` y `con_alto_descarte(umbral)`, encadenables y asignados a `LoteRecepcionado.objects` mediante `as_manager()`. Usado en `lote_list` y `reporte_general`.
+Este proyecto consiste en el desarrollo e implementación del frontend de la aplicación web utilizando **React** y **Vite**. Se construyó una arquitectura basada en componentes funcionales reutilizables, gestión de estado reactivo mediante Hooks (`useState`), flujos de datos unidireccionales (`props` y `children`), renderizado dinámico de colecciones (`.map()`), cálculos agregados (`.reduce()`) y validación de formularios controlados adaptada a las reglas de negocio de la API REST backend (desarrollada en Django).
 
-### Optimización de consultas (N+1)
-Se midió con `connection.queries` el listado de lotes: 7 consultas sin optimizar (N+1, para 6 lotes) frente a 2 consultas aplicando `select_related('fundo', 'evaluacion_calidad')` y `prefetch_related('certificaciones')`.
+---
 
-### Nuevas rutas
-- `/agrotrace/recepcion-transaccional/` — registro transaccional de lotes.
-- `/agrotrace/reporte/` — reporte consolidado de operaciones y métricas.
+## 🚀 Arquitectura y Componentes Desarrollados
 
-## Laboratorio 9 — Frontend React con Vite
+La estructura del frontend se organiza dentro del directorio `src/`:
 
-La aplicación React del laboratorio está en `frontend/`. Requiere Node.js y npm instalados:
-
-```bash
-node -v
-npm -v
-cd frontend
-npm install
-npm run dev
-```
-
-Vite muestra la URL local en la terminal (por defecto `http://localhost:5173`). Para comprobar el código y generar la versión de producción:
-
-```bash
+```text
+frontend/
+├── src/
+│   ├── components/
+│   │   ├── ContenedorSeccion.jsx # Componente contenedor con patrón children
+│   │   ├── FundoBuscador.jsx      # Componente controlado para filtrado en tiempo real
+│   │   ├── FundoCard.jsx          # Ficha individual de fundo
+│   │   ├── FundoConLotes.jsx      # Componente de relación anidada 1:N
+│   │   ├── FundoForm.jsx          # Formulario controlado con validaciones de la API
+│   │   ├── LoteItem.jsx           # Detalle individual de lote/cultivo
+│   │   └── Tarjeta.jsx            # Contenedor gráfico reusable
+│   ├── App.css                    # Estilos visuales de la plataforma
+│   ├── App.jsx                    # Componente principal / Integración de estado global
+│   ├── datos.js                   # Dataset mock de fundos y lotes
+│   └── main.jsx                   # Punto de entrada de la aplicación React (StrictMode)
+├── package.json
+└── vite.config.js
+🛠️ Tecnologías y Herramientas UtilizadasBiblioteca UI: React (v18+)Tooling / Bundler: ViteLenguaje: JavaScript (ES6+) / JSXEstilos: CSS3 (Flexbox & Grid Layout)Calidad de Código y Linter: ESLintEntorno de Ejecución: Node.js & npm⚙️ Instalación y Ejecución LocalSigue estos pasos para levantar el entorno de desarrollo en tu máquina local:1. Clonar el repositorioBashgit clone [https://github.com/carlosjunco2025/lab10_Agrotrace.git](https://github.com/carlosjunco2025/lab10_Agrotrace.git)
+cd lab10_Agrotrace/frontend
+2. Permitir ejecución de scripts (PowerShell en Windows)PowerShellSet-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+3. Instalación de dependenciasBashnpm install
+4. Ejecución en entorno de desarrolloBashnpm run dev
+La aplicación estará disponible en http://localhost:5173/.5. Validación de sintaxis y build de producciónBash# Verificación de linter (0 errores / 0 advertencias)
 npm run lint
+
+# Compilación optimizada para producción
 npm run build
-```
-
-El panel inicial usa datos mock en `frontend/src/App.jsx`; todavía no realiza solicitudes HTTP al backend.
-
-### Estructura: Django y React
-
-| Aspecto | Python / Django | JavaScript / React + Vite |
-|---|---|---|
-| Lenguaje | Python | JavaScript (JSX para describir la interfaz) |
-| Gestor de paquetes | `pip` | `npm` |
-| Archivo de dependencias | `requirements.txt` | `package.json` (versiones resueltas en `package-lock.json`) |
-| Carpeta de dependencias | `.venv/` | `node_modules/` |
-| Servidor de desarrollo | `python manage.py runserver` | `npm run dev` |
-
-`frontend/index.html` es el documento de entrada y contiene el elemento `#root`; puede compararse con la plantilla base `base.html`, aunque aquí solo es la carcasa de una aplicación de una página. `src/main.jsx` crea el punto de montaje de React en el navegador; inicia la aplicación cliente, pero no sustituye literalmente a `wsgi.py` ni a `urls.py`, que son infraestructura y enrutamiento del servidor Django. `src/App.jsx` define la vista y los componentes que React renderiza; en términos de presentación cumple un propósito parecido a una plantilla MVT alimentada por una vista (`views.py`), pero el renderizado ocurre en el cliente. `package.json` declara scripts y dependencias como hace `requirements.txt` con las dependencias Python. `node_modules/` contiene paquetes instalados, análogo a `.venv/`; normalmente ambos directorios se excluyen del control de versiones.
-
-### Renderizado y relación entre los datos
-
-En React, `fundos.map(...)` y el `.map(...)` interno de lotes transforman arreglos JavaScript en elementos de interfaz en el navegador (CSR); React exige una `key` estable para cada elemento listado. En una plantilla Django, `{% for item in items %}` itera sobre el contexto que el servidor preparó y genera HTML en el servidor (SSR). Ambos recorren colecciones, pero se ejecutan en entornos distintos.
-
-Con los Templates de la Semana 6, Django recibe una petición, consulta los datos, renderiza el HTML y devuelve una página; una navegación suele volver al servidor. En una SPA React, el servidor entrega el HTML inicial y los archivos JavaScript; React construye y actualiza la interfaz en el navegador. Los datos pueden cambiar sin recargar todo el documento, normalmente mediante solicitudes a una API. React no reemplaza la API ni los modelos de Django.
-
-### ¿Qué falta para conectar React con la API de la Semana 8?
-
-1. Reemplazar los arreglos mock por estado React (`useState`) y cargar `/api/fundos/` y `/api/lotes/` en un `useEffect` al montar la aplicación.
-2. Ejecutar las solicitudes mediante `fetch` (incluyendo la comprobación de `response.ok`, estados de carga y errores) o instalar y configurar `axios`. Los endpoints actuales están declarados en `agrotrace_config/urls.py` y aceptan listados DRF; los serializadores entregan fundos y lotes simples por separado, con `lote.fundo` como ID. La interfaz debe asociar el lote con el fundo cuyo `id` coincide.
-3. Como Vite y Django suelen ejecutarse en puertos distintos, permitir el origen del frontend en Django con `django-cors-headers`: instalar el paquete, añadir `corsheaders` a `INSTALLED_APPS`, agregar `corsheaders.middleware.CorsMiddleware` antes de `django.middleware.common.CommonMiddleware` y declarar, por ejemplo, `CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]`. Alternativamente, se puede configurar un proxy de desarrollo de Vite.
-4. Añadir manejo de estados de carga, error y respuesta vacía. Para operaciones que modifican datos, además se deben atender el método HTTP, validación y protección CSRF según la configuración del backend.
-
-`node_modules/` y `dist/` no deben versionarse; ambos están excluidos por el `.gitignore` de la raíz. Sí se versionan `package.json` y, una vez generado con `npm install`, `package-lock.json` para reproducir las dependencias.
+📌 Resumen de Ejercicios del LaboratorioEjercicioDescripciónConcepto EvaluadoEj. 1 al 3Configuración de Vite y componentes funcionalesProps, JSX, exportaciones e importaciones.Ej. 4Creación de componentes contenedoresUso del patrón children (Tarjeta.jsx).Ej. 5Relación 1:N y agregación de datosMétodos de arreglo .map() y .reduce() para métricas de peso.Ej. 6Estado local e interactividadHook useState para contadores sintéticos de inspección.Ej. 7Búsqueda reactivaFormulario controlado de filtrado con toLowerCase y includes.Ej. 8Registro y validaciónManejo de onSubmit, preventDefault() y reglas de la API de Django.Ej. 9 al 12Investigación propia en AgroTraceComponentes anidados 1:N, keys únicas y gestión de envíos válidos/inválidos.Ej. 13Inspección y entregaConsola limpia, comprobación de npm run lint / build e ignorado de node_modules y dist en .gitignore.💡 Conclusiones TécnicasImplementación de la Arquitectura Basada en Componentes y Props:Se logró estructurar una interfaz web modular en React dividiendo la aplicación en componentes funcionales reutilizables. Se demostró la eficacia del flujo de datos unidireccional y la inmutabilidad de las props, garantizando que la información transmitida hacia los componentes hijos se mantenga consistente.Gestión del Estado Local y Reactividad:La utilización del Hook useState junto con el manejo de eventos sintéticos (onClick, onChange, onSubmit) permitió construir una experiencia de usuario reactiva en tiempo real. Esto facilitó el filtrado de fundos sin depender del servidor y el cálculo dinámico de totales de producción mediante .reduce().Validación de Formularios y Preparación para Integración API REST:Mediante componentes controlados y e.preventDefault(), se implementó una capa de validación en el cliente que replica las reglas de negocio de la API en Django (longitud mínima de caracteres). Además, se garantizó la calidad técnica del código mediante las verificaciones de ESLint (npm run lint) y la compilación con Vite (npm run build).
