@@ -1,18 +1,18 @@
 import { useState } from 'react'
 import './App.css'
-import Practica from './practica/Practica.jsx'
+import ListaPractica from './practica/ListaPractica.jsx'
 import PanelLotes from './components/PanelLotes.jsx'
 
 const PARTES = [
   {
     id: 'practica',
     indice: '01',
-    etiqueta: 'Práctica cafetería',
+    etiqueta: 'Parte 1 · Lista',
   },
   {
     id: 'panel',
     indice: '02',
-    etiqueta: 'Panel AgroTrace',
+    etiqueta: 'Parte 2 · Panel',
   },
 ]
 
@@ -29,7 +29,7 @@ function App() {
             </span>
             <div>
               <strong>AgroTrace</strong>
-              <span>Semana 11 · Comunicación entre componentes</span>
+              <span>Semana 12 · React + Axios + Django REST</span>
             </div>
           </div>
 
@@ -55,12 +55,12 @@ function App() {
       </nav>
 
       <main className="app-main">
-        {parte === 'practica' ? <Practica /> : <PanelLotes />}
+        {parte === 'practica' ? <ListaPractica /> : <PanelLotes />}
       </main>
 
       <footer className="app-footer">
         <span>AgroTrace · Desarrollo de Aplicaciones Empresariales</span>
-        <span>Laboratorio 11 · Datos mock, sin consumo de API</span>
+        <span>Laboratorio 12 · Consumo de API REST con Axios y CORS</span>
       </footer>
     </div>
   )

@@ -142,6 +142,33 @@
   line-height: 1.35;
 }
 
+.field--check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+}
+
+.field--check input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  padding: 0;
+  accent-color: var(--green-700);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.form-alert--info {
+  border-color: #cfe2d3;
+  background: var(--green-50);
+  color: var(--green-700);
+}
+
 .form-alert {
   margin: 0;
   padding: 9px 11px;
@@ -153,7 +180,8 @@
   font-weight: 600;
 }
 
-.panel-form > .button {
+.panel-form > .button,
+.panel-form > .form-actions {
   align-self: flex-start;
 }
 

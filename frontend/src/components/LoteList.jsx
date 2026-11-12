@@ -1,6 +1,6 @@
 import LoteRow from './LoteRow.jsx'
 
-function LoteList({ lotes, onCambiarEstado, onEliminar }) {
+function LoteList({ lotes, onCambiarEstado, onEliminar, onEditar }) {
   if (lotes.length === 0) {
     return (
       <div className="empty-state empty-state--panel" role="status">
@@ -31,6 +31,7 @@ function LoteList({ lotes, onCambiarEstado, onEliminar }) {
               lote={lote}
               onCambiarEstado={onCambiarEstado}
               onEliminar={onEliminar}
+              onEditar={onEditar}
             />
           ))}
         </tbody>

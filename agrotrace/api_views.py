@@ -60,7 +60,7 @@ class LoteViewSet(EstadoFilterMixin, viewsets.ModelViewSet):
     queryset = LoteRecepcionado.objects.all()
     serializer_class = LoteSimpleSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['codigo_lote']
+    search_fields = ['codigo_lote', 'fundo__nombre_fundo']
     ordering_fields = ['toneladas_brutas', 'id']
 
     @action(detail=False, methods=['get'])
@@ -78,6 +78,9 @@ class LoteDetalladoViewSet(EstadoFilterMixin, viewsets.ReadOnlyModelViewSet):
     ).prefetch_related(
         'certificacionlote_set__certificacion',
     )
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['codigo_lote', 'fundo__nombre_fundo']
+    ordering_fields = ['toneladas_brutas', 'fecha_ingreso', 'id']
 
     @action(detail=False, methods=['get'])
     def pendientes(self, request):

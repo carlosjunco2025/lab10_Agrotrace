@@ -7,9 +7,27 @@ const CAMPOS_INICIALES = {
   fundo: '',
 }
 
-function LoteForm({ onGuardar, fundos, codigosExistentes }) {
-  const [campos, setCampos] = useState(CAMPOS_INICIALES)
+function camposDesdeLote(lote) {
+  if (!lote) return CAMPOS_INICIALES
+
+  return {
+    codigo_lote: lote.codigo_lote,
+    toneladas_brutas: String(lote.toneladas_brutas),
+    porcentaje_descarte: String(lote.porcentaje_descarte),
+    fundo: String(lote.fundo?.id ?? ''),
+  }
+}
+
+function LoteForm({
+  onGuardar,
+  fundos,
+  codigosExistentes,
+  loteEnEdicion,
+  onCancelarEdicion,
+}) {
+  const [campos, setCampos] = useState(() => camposDesdeLote(loteEnEdicion))
   const [errores, setErrores] = useState({})
+  const [enviando, setEnviando] = useState(false)
 
   function cambiarCampo(evento) {
     const { name, value } = evento.target
@@ -21,8 +39,9 @@ function LoteForm({ onGuardar, fundos, codigosExistentes }) {
     }
   }
 
-  function manejarEnvio(evento) {
+  async function manejarEnvio(evento) {
     evento.preventDefault()
+    setErrores({})
 
     const nuevosErrores = {}
     const codigoNormalizado = campos.codigo_lote.trim().toUpperCase()
@@ -31,19 +50,22 @@ function LoteForm({ onGuardar, fundos, codigosExistentes }) {
       campos.porcentaje_descarte.trim() === ''
         ? 0
         : Number(campos.porcentaje_descarte)
+    const codigosAComparar = codigosExistentes.filter(
+      (codigo) => codigo !== loteEnEdicion?.codigo_lote,
+    )
 
-    // Regla 1: campo obligatorio y único (similar a codigo_lote unique=True).
+    // Regla 1: campo obligatorio y único (codigo_lote unique=True).
     if (!codigoNormalizado) {
       nuevosErrores.codigo_lote = 'El código de lote es obligatorio.'
     } else if (
-      codigosExistentes.some(
+      codigosAComparar.some(
         (codigo) => codigo.toUpperCase() === codigoNormalizado,
       )
     ) {
       nuevosErrores.codigo_lote = 'Ya existe un lote con ese código.'
     }
 
-    // Regla 2: número mayor que cero (validate_toneladas_brutas del serializer).
+    // Regla 2: número mayor que cero (validate_toneladas_brutas).
     if (
       campos.toneladas_brutas.trim() === '' ||
       !Number.isFinite(toneladas) ||
@@ -54,11 +76,7 @@ function LoteForm({ onGuardar, fundos, codigosExistentes }) {
     }
 
     // Regla 3: porcentaje válido entre 0 y 100.
-    if (
-      !Number.isFinite(descarte) ||
-      descarte < 0 ||
-      descarte > 100
-    ) {
+    if (!Number.isFinite(descarte) || descarte < 0 || descarte > 100) {
       nuevosErrores.porcentaje_descarte =
         'El porcentaje de descarte debe estar entre 0 y 100.'
     }
@@ -73,33 +91,50 @@ function LoteForm({ onGuardar, fundos, codigosExistentes }) {
       return
     }
 
-    const fundoSeleccionado = fundos.find(
-      (fundo) => fundo.id === Number(campos.fundo),
-    )
+    setEnviando(true)
 
-    if (!fundoSeleccionado) {
-      setErrores({ fundo: 'El fundo seleccionado no existe.' })
-      return
+    try {
+      // El padre decide POST o PATCH y devuelve los errores del serializer.
+      const resultado = await onGuardar({
+        codigo_lote: codigoNormalizado,
+        toneladas_brutas: toneladas.toFixed(2),
+        porcentaje_descarte: descarte.toFixed(2),
+        fundo: campos.fundo,
+      })
+
+      if (!resultado.ok) {
+        setErrores(resultado.errores ?? {})
+        return
+      }
+
+      setCampos(CAMPOS_INICIALES)
+      setErrores({})
+    } finally {
+      setEnviando(false)
     }
-
-    // El formulario no guarda el registro: avisa al padre con onGuardar.
-    onGuardar({
-      codigo_lote: codigoNormalizado,
-      toneladas_brutas: toneladas.toFixed(2),
-      porcentaje_descarte: descarte.toFixed(2),
-      estado_evaluacion: 'PENDIENTE',
-      fecha_ingreso: new Date().toISOString(),
-      fundo: fundoSeleccionado,
-    })
-
-    // Campos vacíos después de un alta válida.
-    setCampos(CAMPOS_INICIALES)
-    setErrores({})
   }
+
+  const errorGeneral = errores.general ?? errores.non_field_errors
+  const estaEditando = Boolean(loteEnEdicion)
 
   return (
     <form className="panel-form" onSubmit={manejarEnvio} noValidate>
-      {Object.keys(errores).length > 0 && (
+      {estaEditando && (
+        <p className="form-alert form-alert--info" role="status">
+          Editando <strong>{loteEnEdicion.codigo_lote}</strong>. El botón
+          guardar enviará un PATCH.
+        </p>
+      )}
+
+      {errorGeneral && (
+        <p className="form-alert" role="alert">
+          {errorGeneral}
+        </p>
+      )}
+
+      {Object.keys(errores).filter(
+        (campo) => errores[campo] && !['general', 'non_field_errors'].includes(campo),
+      ).length > 0 && (
         <p className="form-alert" role="alert">
           Revisa los campos marcados antes de guardar.
         </p>
@@ -186,9 +221,30 @@ function LoteForm({ onGuardar, fundos, codigosExistentes }) {
         </label>
       </div>
 
-      <button type="submit" className="button button--primary">
-        Guardar lote
-      </button>
+      <div className="form-actions">
+        <button
+          type="submit"
+          className="button button--primary"
+          disabled={enviando}
+        >
+          {enviando
+            ? 'Guardando...'
+            : estaEditando
+              ? 'Guardar cambios (PATCH)'
+              : 'Guardar lote (POST)'}
+        </button>
+
+        {estaEditando && (
+          <button
+            type="button"
+            className="button button--ghost"
+            onClick={onCancelarEdicion}
+            disabled={enviando}
+          >
+            Cancelar edición
+          </button>
+        )}
+      </div>
     </form>
   )
 }

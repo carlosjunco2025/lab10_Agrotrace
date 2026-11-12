@@ -1,220 +1,212 @@
-# 🌾 AgroTrace
+# AgroTrace
 
-Proyecto integrador de trazabilidad agrícola. Backend Django + Django REST
-Framework y frontend React + Vite.
+Proyecto integrador de trazabilidad agrícola. Backend **Django + Django REST
+Framework** y frontend **React + Vite**. En la Semana 12 el panel administrativo
+deja de usar datos mock y consume la API REST real mediante **Axios**, con
+**CORS** configurado en Django.
 
 - Repositorio: <https://github.com/carlosjunco2025/lab10_Agrotrace>
+- Backend: `agrotrace/`, `agrotrace_config/`, `manage.py`
 - Frontend: `frontend/`
-- API: `agrotrace/` y `agrotrace_config/`
+- Documentación de la Semana 12: `GLAB-S12-YBESTARD-2026-02.docx`
 
-## Laboratorio 11 — Comunicación entre componentes (React)
+## Semana 12 — Integración Full Stack con Axios y CORS
 
-La pantalla principal del frontend permite alternar entre dos módulos:
+La aplicación tiene dos módulos que se alternan desde la barra superior:
 
-1. **Parte 1 — Práctica cafetería:** mini catálogo con carrito, buscador y aviso
-   temporal.
-2. **Parte 2 — Panel AgroTrace:** gestión de `LoteRecepcionado` con listado,
-   formulario de alta, resumen, buscador compartido y acciones por fila.
+1. **Parte 1 — Lista de práctica (`frontend/src/practica/ListaPractica.jsx`)**:
+   CRUD completo sobre `/api/fundos/` con `GET`, `POST`, `PATCH` y `DELETE`.
+   Incluye estados de carga y error, búsqueda con `?search=` y mensajes de
+   validación `400` devueltos por el serializer.
+2. **Parte 2 — Panel administrativo (`frontend/src/components/PanelLotes.jsx`)**:
+   gestión real de `LoteRecepcionado` contra `/api/lotes-detallados/`. Incluye
+   alta con `POST`, edición con `PATCH`, eliminación con confirmación y manejo
+   explícito del `404`, búsqueda + filtro por estado combinados y un resumen
+   derivado de los datos reales.
 
-Ambos módulos usan datos mock escritos a mano con la forma de la respuesta de la
-API de la Semana 8. **Todavía no se consume la API**; eso corresponde a la
-Semana 12. Los campos decimales (`precio`, `toneladas_brutas`,
-`porcentaje_descarte`, `hectareas`) se guardan como texto, igual que los
-serializa DRF.
+### Endpoints REST utilizados
 
-### Estructura del frontend
+| Recurso | Método | URL | Código esperado | Uso |
+|---|---|---|---|---|
+| Fundos | `GET` | `/api/fundos/?search=texto` | `200 OK` | Listado y búsqueda de la Parte 1 |
+| Fundos | `POST` | `/api/fundos/` | `201 Created` | Alta de fundo |
+| Fundos | `PATCH` | `/api/fundos/{id}/` | `200 OK` | Edición rápida de exportación |
+| Fundos | `DELETE` | `/api/fundos/{id}/` | `204 No Content` | Baja de fundo |
+| Lotes | `GET` | `/api/lotes-detallados/?search=&estado=` | `200 OK` | Listado y filtro combinado del panel |
+| Lotes | `POST` | `/api/lotes/` | `201 Created` | Alta de lote |
+| Lotes | `PATCH` | `/api/lotes/{id}/` | `200 OK` | Edición de lote y cambio de estado |
+| Lotes | `DELETE` | `/api/lotes/{id}/` | `204 No Content` | Baja de lote con confirmación |
+| Error de validación | `POST` | `/api/fundos/` o `/api/lotes/` | `400 Bad Request` | Errores de `validate_<campo>` |
+| Registro inexistente | `DELETE` | `/api/.../{id}/` | `404 Not Found` | Registro eliminado en el servidor |
+
+Los endpoints de la API se montan bajo `http://127.0.0.1:8000/api/` mediante el
+`DefaultRouter` de DRF. También existen `fundos`, `lotes`, `lotes-detallados`,
+`evaluaciones` y `evaluaciones-detalladas`.
+
+### Configuración de CORS
+
+En `agrotrace_config/settings.py`:
+
+```python
+INSTALLED_APPS = [
+    # ...
+    'corsheaders',
+    'rest_framework',
+    'agrotrace',
+]
+
+MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.security.SecurityMiddleware',
+    # ...
+    'django.middleware.common.CommonMiddleware',
+    # ...
+]
+
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]
+```
+
+`CorsMiddleware` debe ir antes de `CommonMiddleware` y de cualquier middleware
+que pueda generar respuestas (por ejemplo `WhiteNoise`). Si el frontend se abre
+desde otro puerto u origen, hay que agregarlo a `CORS_ALLOWED_ORIGINS`.
+
+### Cliente Axios
+
+`frontend/src/api.js` exporta una instancia única:
+
+```js
+const api = axios.create({
+  baseURL: 'http://127.0.0.1:8000/api/',
+  timeout: 5000,
+  headers: { 'Content-Type': 'application/json' },
+})
+```
+
+También expone `normalizarErrores()` para convertir la respuesta `400` de DRF
+en errores por campo y `mensajeDeError()` para errores de red o timeout.
+
+### Ejecutar backend y frontend simultáneamente
+
+Requisitos: Python 3.12+ y Node.js LTS. Desde la raíz del repositorio:
+
+```powershell
+# 1. Entorno virtual e instalación del backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py seed_demo       # datos de demostración idempotentes
+python manage.py runserver 127.0.0.1:8000
+```
+
+En una **segunda terminal**:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+- Django: <http://127.0.0.1:8000/api/>
+- React + Vite: <http://localhost:5173/>
+
+Ambos servidores deben quedar encendidos al mismo tiempo. Vite usa el puerto
+`5173`; si está ocupado, ajusta el origen en `CORS_ALLOWED_ORIGINS`.
+
+### Datos de demostración
+
+El comando `seed_demo` crea cuatro fundos y seis lotes. Para reiniciar la base
+local:
+
+```powershell
+python manage.py seed_demo --reset
+```
+
+El archivo `db.sqlite3` es local y está excluido por `.gitignore`.
+
+### Verificación de calidad
+
+```powershell
+cd frontend
+npm run lint
+npm run build
+```
+
+Ambos comandos deben terminar sin errores ni advertencias. `node_modules/` y
+`dist/` están excluidos del repositorio.
+
+## Estructura del frontend
 
 ```text
 frontend/
 ├── public/
-│   └── favicon.svg
 ├── src/
-│   ├── App.jsx                  # Navegación entre Parte 1 y Parte 2
-│   ├── App.css                  # Base visual y estilos compartidos
-│   ├── practica/                # PARTE 1
-│   │   ├── datos.js             # 5 productos mock
-│   │   ├── Practica.jsx         # Padre: carrito, búsqueda y aviso
-│   │   ├── Buscador.jsx         # Input controlado
-│   │   ├── Catalogo.jsx         # Lista con map() y key
-│   │   ├── ProductoCard.jsx     # Presentación y botón Agregar
-│   │   ├── Carrito.jsx          # Total y unidades con reduce()
-│   │   ├── Aviso.jsx            # Toast con setTimeout y limpieza
-│   │   └── practica.css
-│   └── components/              # PARTE 2
-│       ├── PanelLotes.jsx       # Padre: estado elevado de los lotes
-│       ├── LoteList.jsx         # Listado con map() y key
-│       ├── LoteRow.jsx          # Fila con acciones
-│       ├── LoteForm.jsx         # Alta controlada y validada
-│       ├── ResumenLotes.jsx     # Datos derivados sin useState
-│       ├── LoteBuscador.jsx     # Filtro de texto y estado
-│       ├── loteUtils.js         # Etiquetas, transiciones y formato
+│   ├── api.js                     # Instancia Axios y manejo de errores
+│   ├── App.jsx                    # Alterna Parte 1 y Parte 2
+│   ├── App.css                    # Base visual compartida
+│   ├── practica/
+│   │   ├── ListaPractica.jsx      # PARTE 1: CRUD con Axios
+│   │   ├── Practica.jsx           # Práctica de la Semana 11 (referencia)
+│   │   └── ...
+│   └── components/
+│       ├── PanelLotes.jsx         # PARTE 2: estado y llamadas a la API
+│       ├── LoteForm.jsx           # POST / PATCH y errores 400
+│       ├── LoteList.jsx           # Listado con map() y key
+│       ├── LoteRow.jsx            # Editar, cambiar estado y eliminar
+│       ├── LoteBuscador.jsx       # search + estado
+│       ├── ResumenLotes.jsx       # Datos derivados sin useState
 │       └── panel.css
 ├── index.html
 ├── package.json
 └── vite.config.js
 ```
 
-### Parte 1: flujo de estado y props
+## Flujo de datos de la Semana 12
 
 ```text
-Practica  (carrito, busqueda, aviso)
-├── Buscador        ← valor, onCambiar
-├── Catalogo        ← productosFiltrados, onAgregar
-│   └── ProductoCard ← producto, onAgregar
-├── Carrito         ← lineas, onQuitar, onVaciar
-└── Aviso           ← aviso, onCerrar
+ListaPractica
+├── useEffect [buscar] -> GET /fundos/?search=
+├── POST /fundos/      -> spread [...fundos, respuesta.data]
+├── PATCH /fundos/:id/ -> map() para reemplazar la fila
+└── DELETE /fundos/:id/-> filter() cuando llega 204
+
+PanelLotes
+├── useEffect []                    -> GET /fundos/ (select del formulario)
+├── useEffect [busqueda, estado]    -> GET /lotes-detallados/?search=&estado=
+├── LoteForm -> POST /lotes/ o PATCH /lotes/:id/
+├── LoteRow  -> PATCH estado o DELETE con window.confirm
+├── 400 -> normalizarErrores() y mensajes junto a cada campo
+├── 404 -> aviso y sincronización de la tabla
+└── ResumenLotes -> totales, promedios y conteos con reduce()
 ```
 
-- El usuario escribe en `Buscador`; el hijo llama a `onCambiar(texto)` y el
-  padre actualiza `busqueda` con `setBusqueda`. El filtro se calcula con
-  `filter()` + `includes()` en `Practica` y el resultado baja a `Catalogo` por
-  props.
-- El usuario pulsa **Agregar** en `ProductoCard`; la tarjeta ejecuta
-  `onAgregar(producto)`. `Practica.agregarAlCarrito` crea un arreglo nuevo:
-  `map()` para incrementar la cantidad de una línea existente o spread `[...]`
-  para añadir una nueva. Nunca se usa `push` ni `splice`.
-- `Carrito` recibe las líneas y calcula `cantidadTotal` y `totalPagar` con
-  `reduce()`. Son datos derivados: no tienen `useState` propio.
-- `Carrito` usa `useEffect` con dependencia `[cantidadTotal]` para actualizar
-  `document.title` (`Carrito (X) — Cafetería`) y registrar el ciclo de vida en
-  consola. La función de limpieza se ejecuta antes del siguiente efecto y al
-  desmontar.
-- `Aviso` muestra `Agregado: <nombre>` y programa un `setTimeout` de 3 segundos;
-  la limpieza llama a `clearTimeout` para evitar temporizadores huérfanos.
-- `ProductoCard` desactiva el botón cuando `stock === 0` y muestra `Agotado`.
-  El precio se formatea con `Number(precio).toFixed(2)`.
+### Decisiones de implementación
 
-### Parte 2: panel administrativo de AgroTrace
+- **Estados de carga y error:** cada petición `GET` usa `cargando`, `error` y
+  `finally`; las listas vacías muestran un estado explícito.
+- **Cancelación:** los `useEffect` crean un `AbortController` y lo abortan en la
+  limpieza para evitar respuestas fuera de orden al escribir en el buscador.
+- **Normalización:** los decimales de DRF llegan como texto (`"12.50"`). El
+  panel los convierte con `Number()` antes de sumar o promediar.
+- **Inmutabilidad:** las altas usan spread, las ediciones `map()` y las bajas
+  `filter()`.
+- **Errores del servidor:** se leen de `err.response.data`, se muestran junto al
+  campo y no se confunden con errores de red.
+- **Eliminación:** se pide confirmación con `window.confirm`. Si el servidor
+  responde `404`, el registro se quita de la tabla y se avisa que ya no existía.
 
-Entidad principal: `LoteRecepcionado`, con el `fundo` anidado tal como lo
-entrega `LoteDetalladoSerializer` en la Semana 8:
+## Laboratorios anteriores
 
-```json
-{
-  "id": 1,
-  "codigo_lote": "LOT-2026-001",
-  "toneladas_brutas": "12.50",
-  "porcentaje_descarte": "1.20",
-  "estado_evaluacion": "PENDIENTE",
-  "fecha_ingreso": "2026-11-02T08:30:00-05:00",
-  "fundo": {
-    "id": 1,
-    "nombre_fundo": "Fundo Santa Elena",
-    "propietario_dni_ruc": "20481234567",
-    "hectareas": "48.50",
-    "valido_exportacion": true,
-    "cupo_diario_lotes": 12
-  }
-}
-```
+- **Semana 11:** comunicación entre componentes con datos mock (práctica de
+  carrito y panel con estado elevado).
+- **Semana 10:** frontend React + Vite con componentes, props, `useState`,
+  `map()`, `reduce()` y validación de formularios.
+- **Semanas 7 y 8:** backend Django, modelos, CRUD con templates, transacciones
+  y API REST con DRF.
 
-```text
-PanelLotes  (lotes, busqueda, filtroEstado)
-├── ResumenLotes   ← lotes
-├── LoteForm       ← onGuardar, fundos, codigosExistentes
-├── LoteBuscador   ← busqueda, onBusquedaChange, estado, onEstadoChange
-└── LoteList       ← lotesFiltrados, onCambiarEstado, onEliminar
-    └── LoteRow    ← lote, onCambiarEstado, onEliminar
-```
+## Autor
 
-- **Estado elevado:** `PanelLotes` guarda el arreglo de lotes con `useState`.
-  `ResumenLotes`, `LoteList` y `LoteBuscador` reciben los datos por props.
-- **Avisos del hijo al padre:** cada fila ejecuta `onCambiarEstado(id)` o
-  `onEliminar(id)`. El padre responde con `map()` o `filter()` y crea siempre un
-  arreglo nuevo.
-- **Formulario controlado:** `LoteForm` maneja sus campos con `useState` y
-  valida antes de enviar:
-  1. `codigo_lote` obligatorio y único.
-  2. `toneladas_brutas` numérico mayor que 0 (misma regla que
-     `validate_toneladas_brutas` del serializer).
-  3. `porcentaje_descarte` entre 0 y 100.
-  4. `fundo` obligatorio.
-  Si es válido llama a `onGuardar(nuevoRegistro)`, el padre añade el registro
-  con `[...lotes, nuevo]` y el formulario limpia sus campos.
-- **Resumen hermano:** `ResumenLotes` calcula total de lotes, suma de toneladas
-  con `reduce()`, promedio de descarte y conteo por estado sin `useState`.
-- **Buscador compartido:** `PanelLotes` filtra por texto (código, fundo o
-  estado) y por estado. El listado muestra `No hay lotes que coincidan con la
-  búsqueda.` cuando el resultado está vacío.
-- **useEffect:** `PanelLotes` actualiza `document.title` con el número de lotes
-  (`AgroTrace · X lotes`) y registra la limpieza del efecto en consola.
-
-### Ejecutar el proyecto
-
-Requisitos: Node.js LTS (incluye npm). Desde la raíz del repositorio:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Vite publica la aplicación en <http://localhost:5173/>. Para verificar y generar
-la build de producción:
-
-```bash
-npm run lint
-npm run build
-```
-
-Ambos comandos deben terminar sin errores ni advertencias. `node_modules/` y
-`dist/` están excluidos por el `.gitignore` de la raíz; no se versionan.
-
-### Criterios de comunicación cubiertos
-
-| Mecanismo | Parte 1 | Parte 2 |
-|---|---|---|
-| Datos del padre al hijo | `productos`, `lineas`, `valor` | `lotes`, `fundos`, `busqueda` |
-| Aviso del hijo al padre | `onAgregar`, `onCambiar`, `onQuitar`, `onVaciar` | `onGuardar`, `onCambiarEstado`, `onEliminar`, `onBusquedaChange` |
-| Estado elevado | `carrito` y `busqueda` en `Practica` | `lotes`, `busqueda` y `filtroEstado` en `PanelLotes` |
-| Datos derivados | total y unidades con `reduce()` | totales, promedio y conteo con `reduce()` |
-| `useEffect` | título del carrito y aviso de 3 s | título del panel y limpieza del efecto |
-| Inmutabilidad | `map`, `filter`, spread | `map`, `filter`, spread |
-
-
----
-
-# 🌾 AgroTrace — Laboratorio 10 (Frontend con React + Vite)
-
-Bienvenido al repositorio de la **Semana 10** del proyecto **AgroTrace**, una plataforma web orientada al monitoreo, trazabilidad agrícola y control de fundos productores con recepción de lotes.
-
----
-
-## 📋 Descripción del Proyecto
-
-Este proyecto consiste en el desarrollo e implementación del frontend de la aplicación web utilizando **React** y **Vite**. Se construyó una arquitectura basada en componentes funcionales reutilizables, gestión de estado reactivo mediante Hooks (`useState`), flujos de datos unidireccionales (`props` y `children`), renderizado dinámico de colecciones (`.map()`), cálculos agregados (`.reduce()`) y validación de formularios controlados adaptada a las reglas de negocio de la API REST backend (desarrollada en Django).
-
----
-
-## 🚀 Arquitectura y Componentes Desarrollados
-
-La estructura del frontend se organiza dentro del directorio `src/`:
-
-```text
-frontend/
-├── src/
-│   ├── components/
-│   │   ├── ContenedorSeccion.jsx # Componente contenedor con patrón children
-│   │   ├── FundoBuscador.jsx      # Componente controlado para filtrado en tiempo real
-│   │   ├── FundoCard.jsx          # Ficha individual de fundo
-│   │   ├── FundoConLotes.jsx      # Componente de relación anidada 1:N
-│   │   ├── FundoForm.jsx          # Formulario controlado con validaciones de la API
-│   │   ├── LoteItem.jsx           # Detalle individual de lote/cultivo
-│   │   └── Tarjeta.jsx            # Contenedor gráfico reusable
-│   ├── App.css                    # Estilos visuales de la plataforma
-│   ├── App.jsx                    # Componente principal / Integración de estado global
-│   ├── datos.js                   # Dataset mock de fundos y lotes
-│   └── main.jsx                   # Punto de entrada de la aplicación React (StrictMode)
-├── package.json
-└── vite.config.js
-🛠️ Tecnologías y Herramientas UtilizadasBiblioteca UI: React (v18+)Tooling / Bundler: ViteLenguaje: JavaScript (ES6+) / JSXEstilos: CSS3 (Flexbox & Grid Layout)Calidad de Código y Linter: ESLintEntorno de Ejecución: Node.js & npm⚙️ Instalación y Ejecución LocalSigue estos pasos para levantar el entorno de desarrollo en tu máquina local:1. Clonar el repositorioBashgit clone [https://github.com/carlosjunco2025/lab10_Agrotrace.git](https://github.com/carlosjunco2025/lab10_Agrotrace.git)
-cd lab10_Agrotrace/frontend
-2. Permitir ejecución de scripts (PowerShell en Windows)PowerShellSet-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
-3. Instalación de dependenciasBashnpm install
-4. Ejecución en entorno de desarrolloBashnpm run dev
-La aplicación estará disponible en http://localhost:5173/.5. Validación de sintaxis y build de producciónBash# Verificación de linter (0 errores / 0 advertencias)
-npm run lint
-
-# Compilación optimizada para producción
-npm run build
-📌 Resumen de Ejercicios del LaboratorioEjercicioDescripciónConcepto EvaluadoEj. 1 al 3Configuración de Vite y componentes funcionalesProps, JSX, exportaciones e importaciones.Ej. 4Creación de componentes contenedoresUso del patrón children (Tarjeta.jsx).Ej. 5Relación 1:N y agregación de datosMétodos de arreglo .map() y .reduce() para métricas de peso.Ej. 6Estado local e interactividadHook useState para contadores sintéticos de inspección.Ej. 7Búsqueda reactivaFormulario controlado de filtrado con toLowerCase y includes.Ej. 8Registro y validaciónManejo de onSubmit, preventDefault() y reglas de la API de Django.Ej. 9 al 12Investigación propia en AgroTraceComponentes anidados 1:N, keys únicas y gestión de envíos válidos/inválidos.Ej. 13Inspección y entregaConsola limpia, comprobación de npm run lint / build e ignorado de node_modules y dist en .gitignore.💡 Conclusiones TécnicasImplementación de la Arquitectura Basada en Componentes y Props:Se logró estructurar una interfaz web modular en React dividiendo la aplicación en componentes funcionales reutilizables. Se demostró la eficacia del flujo de datos unidireccional y la inmutabilidad de las props, garantizando que la información transmitida hacia los componentes hijos se mantenga consistente.Gestión del Estado Local y Reactividad:La utilización del Hook useState junto con el manejo de eventos sintéticos (onClick, onChange, onSubmit) permitió construir una experiencia de usuario reactiva en tiempo real. Esto facilitó el filtrado de fundos sin depender del servidor y el cálculo dinámico de totales de producción mediante .reduce().Validación de Formularios y Preparación para Integración API REST:Mediante componentes controlados y e.preventDefault(), se implementó una capa de validación en el cliente que replica las reglas de negocio de la API en Django (longitud mínima de caracteres). Además, se garantizó la calidad técnica del código mediante las verificaciones de ESLint (npm run lint) y la compilación con Vite (npm run build).
+Yunior Bestard Aroche — Desarrollo de Aplicaciones Empresariales.

@@ -1,182 +1,260 @@
 import { useEffect, useState } from 'react'
+import api, { mensajeDeError, normalizarErrores } from '../api.js'
 import LoteBuscador from './LoteBuscador.jsx'
 import LoteForm from './LoteForm.jsx'
 import LoteList from './LoteList.jsx'
 import ResumenLotes from './ResumenLotes.jsx'
-import { ETIQUETAS_ESTADO, SIGUIENTE_ESTADO } from './loteUtils.js'
+import { SIGUIENTE_ESTADO } from './loteUtils.js'
 import './panel.css'
 
-// Fundos de ejemplo con la forma que devuelve FundoProductorSerializer
-// (Semana 8): los decimales viajan como texto.
-const fundosIniciales = [
-  {
-    id: 1,
-    nombre_fundo: 'Fundo Santa Elena',
-    propietario_dni_ruc: '20481234567',
-    hectareas: '48.50',
-    valido_exportacion: true,
-    cupo_diario_lotes: 12,
-  },
-  {
-    id: 2,
-    nombre_fundo: 'Fundo Valle Verde',
-    propietario_dni_ruc: '45872136',
-    hectareas: '32.00',
-    valido_exportacion: false,
-    cupo_diario_lotes: 3,
-  },
-  {
-    id: 3,
-    nombre_fundo: 'Fundo Los Olivos',
-    propietario_dni_ruc: '20567891234',
-    hectareas: '65.75',
-    valido_exportacion: true,
-    cupo_diario_lotes: 8,
-  },
-  {
-    id: 4,
-    nombre_fundo: 'Fundo La Esperanza',
-    propietario_dni_ruc: '20601234567',
-    hectareas: '24.00',
-    valido_exportacion: true,
-    cupo_diario_lotes: 6,
-  },
-]
+// El serializer devuelve los decimales como texto (por ejemplo "12.50").
+// El adaptador los convierte a Number para que las operaciones aritméticas
+// del resumen y de la tabla sean seguras.
+function normalizarFundo(fundo) {
+  if (!fundo) return fundo
 
-// Registros iniciales con la forma de LoteDetalladoSerializer (Semana 8):
-// toneladas_brutas y porcentaje_descarte son strings decimales y el fundo
-// viene anidado como objeto.
-const lotesIniciales = [
-  {
-    id: 1,
-    codigo_lote: 'LOT-2026-001',
-    toneladas_brutas: '12.50',
-    porcentaje_descarte: '1.20',
-    estado_evaluacion: 'PENDIENTE',
-    fecha_ingreso: '2026-11-02T08:30:00-05:00',
-    fundo: fundosIniciales[0],
-  },
-  {
-    id: 2,
-    codigo_lote: 'LOT-2026-002',
-    toneladas_brutas: '8.75',
-    porcentaje_descarte: '2.40',
-    estado_evaluacion: 'EN_PROCESO',
-    fecha_ingreso: '2026-11-03T09:15:00-05:00',
-    fundo: fundosIniciales[0],
-  },
-  {
-    id: 3,
-    codigo_lote: 'LOT-2026-003',
-    toneladas_brutas: '15.00',
-    porcentaje_descarte: '0.80',
-    estado_evaluacion: 'PROCESADO',
-    fecha_ingreso: '2026-11-04T07:45:00-05:00',
-    fundo: fundosIniciales[1],
-  },
-  {
-    id: 4,
-    codigo_lote: 'LOT-2026-004',
-    toneladas_brutas: '6.25',
-    porcentaje_descarte: '3.10',
-    estado_evaluacion: 'PENDIENTE',
-    fecha_ingreso: '2026-11-05T10:20:00-05:00',
-    fundo: fundosIniciales[2],
-  },
-  {
-    id: 5,
-    codigo_lote: 'LOT-2026-005',
-    toneladas_brutas: '22.40',
-    porcentaje_descarte: '1.75',
-    estado_evaluacion: 'PROCESADO',
-    fecha_ingreso: '2026-11-06T11:00:00-05:00',
-    fundo: fundosIniciales[3],
-  },
-  {
-    id: 6,
-    codigo_lote: 'LOT-2026-006',
-    toneladas_brutas: '9.80',
-    porcentaje_descarte: '0.00',
-    estado_evaluacion: 'EN_PROCESO',
-    fecha_ingreso: '2026-11-07T08:05:00-05:00',
-    fundo: fundosIniciales[2],
-  },
-]
+  return {
+    ...fundo,
+    hectareas: Number(fundo.hectareas),
+  }
+}
+
+function normalizarLote(lote) {
+  return {
+    ...lote,
+    toneladas_brutas: Number(lote.toneladas_brutas),
+    porcentaje_descarte: Number(lote.porcentaje_descarte),
+    fundo: normalizarFundo(lote.fundo),
+  }
+}
 
 function PanelLotes() {
-  // Única fuente de verdad del panel: los registros viven aquí y bajan por
-  // props al listado, al resumen y al buscador.
-  const [lotes, setLotes] = useState(lotesIniciales)
+  const [lotes, setLotes] = useState([])
+  const [fundos, setFundos] = useState([])
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState('')
+  const [errorFundos, setErrorFundos] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
+  const [loteEnEdicion, setLoteEnEdicion] = useState(null)
+  const [aviso, setAviso] = useState('')
+  const [recarga, setRecarga] = useState(0)
+
+  // GET de fundos una sola vez: alimenta el <select> del formulario.
+  useEffect(() => {
+    const controlador = new AbortController()
+
+    async function cargarFundos() {
+      try {
+        const respuesta = await api.get('fundos/', {
+          signal: controlador.signal,
+        })
+        setFundos(respuesta.data.map(normalizarFundo))
+      } catch (err) {
+        if (err.code === 'ERR_CANCELED') return
+        setErrorFundos('No se pudo cargar el catálogo de fundos.')
+        console.error('[PanelLotes] GET /fundos/', err)
+      }
+    }
+
+    cargarFundos()
+    return () => controlador.abort()
+  }, [])
+
+  // GET de lotes cada vez que cambia el texto, el estado o se pide recargar.
+  // Ejercicio 11: búsqueda y filtro combinados en una sola petición.
+  useEffect(() => {
+    const controlador = new AbortController()
+
+    async function cargarLotes() {
+      setCargando(true)
+      setError('')
+
+      try {
+        const respuesta = await api.get('lotes-detallados/', {
+          params: {
+            search: busqueda,
+            estado: filtroEstado,
+          },
+          signal: controlador.signal,
+        })
+        setLotes(respuesta.data.map(normalizarLote))
+      } catch (err) {
+        if (err.code === 'ERR_CANCELED') return
+        setError(
+          'No se pudieron cargar los lotes. Revisa que Django esté encendido en el puerto 8000.',
+        )
+        console.error('[PanelLotes] GET /lotes-detallados/', err)
+      } finally {
+        if (!controlador.signal.aborted) setCargando(false)
+      }
+    }
+
+    const temporizador = setTimeout(cargarLotes, 250)
+
+    return () => {
+      clearTimeout(temporizador)
+      controlador.abort()
+    }
+  }, [busqueda, filtroEstado, recarga])
 
   useEffect(() => {
     document.title = `AgroTrace · ${lotes.length} lotes`
-    console.log(
-      `[PanelLotes] efecto ejecutado: título con ${lotes.length} lotes`,
-    )
-
-    return () => {
-      console.log('[PanelLotes] limpieza del efecto de título')
-    }
   }, [lotes.length])
 
-  const pendientes = lotes.filter(
-    (lote) => lote.estado_evaluacion === 'PENDIENTE',
-  ).length
-
-  // Filtro compartido: el texto y el estado se guardan en este padre.
-  const textoBuscado = busqueda.trim().toLocaleLowerCase('es')
-  const lotesFiltrados = lotes.filter((lote) => {
-    const campos = [
-      lote.codigo_lote,
-      lote.fundo.nombre_fundo,
-      ETIQUETAS_ESTADO[lote.estado_evaluacion],
-    ]
-    const coincideTexto =
-      !textoBuscado ||
-      campos.some((campo) =>
-        campo.toLocaleLowerCase('es').includes(textoBuscado),
-      )
-    const coincideEstado =
-      !filtroEstado || lote.estado_evaluacion === filtroEstado
-
-    return coincideTexto && coincideEstado
-  })
-
-  function guardarLote(datos) {
-    setLotes((registros) => {
-      const siguienteId =
-        registros.reduce((maximo, lote) => Math.max(maximo, lote.id), 0) + 1
-
-      // Arreglo nuevo con spread, sin push.
-      return [...registros, { id: siguienteId, ...datos }]
-    })
-  }
-
-  function cambiarEstado(id) {
-    // Arreglo nuevo con map; el lote modificado también es un objeto nuevo.
-    setLotes((registros) =>
-      registros.map((lote) =>
-        lote.id === id
-          ? {
-              ...lote,
-              estado_evaluacion: SIGUIENTE_ESTADO[lote.estado_evaluacion],
-            }
-          : lote,
-      ),
+  // POST o PATCH según haya un lote en edición. Devuelve el resultado al
+  // formulario para que pinte los errores 400 del serializer.
+  async function guardarLote(datos) {
+    setAviso('')
+    const fundoSeleccionado = fundos.find(
+      (fundo) => fundo.id === Number(datos.fundo),
     )
+
+    const payload = {
+      codigo_lote: datos.codigo_lote,
+      toneladas_brutas: datos.toneladas_brutas,
+      porcentaje_descarte: datos.porcentaje_descarte,
+      estado_evaluacion: loteEnEdicion
+        ? loteEnEdicion.estado_evaluacion
+        : 'PENDIENTE',
+      fundo: Number(datos.fundo),
+    }
+
+    try {
+      if (loteEnEdicion) {
+        const respuesta = await api.patch(
+          `lotes/${loteEnEdicion.id}/`,
+          payload,
+        )
+
+        // 200 OK: map() reemplaza solo la fila editada.
+        setLotes((registros) =>
+          registros.map((lote) =>
+            lote.id === loteEnEdicion.id
+              ? normalizarLote({
+                  ...lote,
+                  ...respuesta.data,
+                  fundo: fundoSeleccionado,
+                })
+              : lote,
+          ),
+        )
+        setLoteEnEdicion(null)
+        setAviso(`Lote ${payload.codigo_lote} actualizado (HTTP 200).`)
+        return { ok: true }
+      }
+
+      const respuesta = await api.post('lotes/', payload)
+
+      // 201 Created: arreglo nuevo con spread.
+      setLotes((registros) => [
+        ...registros,
+        normalizarLote({
+          ...respuesta.data,
+          fecha_ingreso: new Date().toISOString(),
+          fundo: fundoSeleccionado,
+        }),
+      ])
+      setAviso(`Lote ${payload.codigo_lote} creado (HTTP 201).`)
+      return { ok: true }
+    } catch (err) {
+      console.error('[PanelLotes] guardar lote', err)
+
+      if (err.response?.status === 400) {
+        return { ok: false, errores: normalizarErrores(err.response) }
+      }
+
+      return {
+        ok: false,
+        errores: { general: mensajeDeError(err, 'No se pudo guardar el lote.') },
+      }
+    }
   }
 
-  function eliminarLote(id) {
-    // Arreglo nuevo con filter.
-    setLotes((registros) => registros.filter((lote) => lote.id !== id))
+  // PATCH de la acción rápida de estado.
+  async function cambiarEstado(id) {
+    const lote = lotes.find((registro) => registro.id === id)
+    if (!lote) return
+
+    setAviso('')
+
+    try {
+      const respuesta = await api.patch(`lotes/${id}/`, {
+        estado_evaluacion: SIGUIENTE_ESTADO[lote.estado_evaluacion],
+      })
+
+      const actualizado = normalizarLote({ ...lote, ...respuesta.data })
+      setLotes((registros) =>
+        registros.map((registro) =>
+          registro.id === id ? actualizado : registro,
+        ),
+      )
+      setLoteEnEdicion((enEdicion) =>
+        enEdicion?.id === id ? actualizado : enEdicion,
+      )
+      setAviso(`Estado de ${lote.codigo_lote} actualizado (HTTP 200).`)
+    } catch (err) {
+      if (err.response?.status === 404) {
+        setLotes((registros) =>
+          registros.filter((registro) => registro.id !== id),
+        )
+        setAviso(
+          `El lote ${lote.codigo_lote} ya no existe en el servidor (HTTP 404) y se quitó de la tabla.`,
+        )
+      } else {
+        setAviso(mensajeDeError(err, 'No se pudo cambiar el estado.'))
+      }
+      console.error('[PanelLotes] PATCH estado', err)
+    }
+  }
+
+  // Ejercicio 12: DELETE con confirmación y manejo explícito del 404.
+  async function eliminarLote(id) {
+    const lote = lotes.find((registro) => registro.id === id)
+    if (!lote) return
+
+    const confirmado = window.confirm(
+      `¿Eliminar el lote "${lote.codigo_lote}" del fundo ${lote.fundo.nombre_fundo}?`,
+    )
+
+    if (!confirmado) return
+
+    setAviso('')
+
+    try {
+      const respuesta = await api.delete(`lotes/${id}/`)
+
+      if (respuesta.status === 204) {
+        setLotes((registros) =>
+          registros.filter((registro) => registro.id !== id),
+        )
+        if (loteEnEdicion?.id === id) setLoteEnEdicion(null)
+        setAviso(`Lote ${lote.codigo_lote} eliminado (HTTP 204).`)
+      }
+    } catch (err) {
+      if (err.response?.status === 404) {
+        setLotes((registros) =>
+          registros.filter((registro) => registro.id !== id),
+        )
+        if (loteEnEdicion?.id === id) setLoteEnEdicion(null)
+        setAviso(
+          `El lote ${lote.codigo_lote} ya no existía en el servidor (HTTP 404). Se sincronizó la tabla.`,
+        )
+      } else {
+        setAviso(mensajeDeError(err, 'No se pudo eliminar el lote.'))
+      }
+      console.error('[PanelLotes] DELETE /lotes/', err)
+    }
   }
 
   function limpiarFiltros() {
     setBusqueda('')
     setFiltroEstado('')
   }
+
+  const pendientes = lotes.filter(
+    (lote) => lote.estado_evaluacion === 'PENDIENTE',
+  ).length
 
   return (
     <div className="module">
@@ -185,13 +263,33 @@ function PanelLotes() {
           <p className="eyebrow">Parte 2 · Panel administrativo AgroTrace</p>
           <h1>Lotes recepcionados</h1>
           <p className="module-intro">
-            Gestión de la entidad <code>LoteRecepcionado</code> con datos mock
-            de la API de la Semana 8. El estado vive en <code>PanelLotes</code>{' '}
-            y los hijos solo lo leen o avisan cambios.
+            Gestión real de <code>LoteRecepcionado</code> contra{' '}
+            <code>/api/lotes-detallados/</code>. El estado vive en{' '}
+            <code>PanelLotes</code> y los hijos solo lo leen o avisan cambios.
           </p>
         </div>
-        <span className="pill">Datos mock · Sin API todavía</span>
+        <span className="pill">
+          {cargando ? 'Consultando API...' : 'API real · CORS activo'}
+        </span>
       </header>
+
+      {aviso && (
+        <aside className="global-alert" role="status">
+          <span className="alert-icon" aria-hidden="true">
+            i
+          </span>
+          <p>{aviso}</p>
+        </aside>
+      )}
+
+      {errorFundos && (
+        <aside className="global-alert" role="alert">
+          <span className="alert-icon" aria-hidden="true">
+            !
+          </span>
+          <p>{errorFundos}</p>
+        </aside>
+      )}
 
       <ResumenLotes lotes={lotes} />
 
@@ -203,7 +301,7 @@ function PanelLotes() {
           <p>
             Hay <strong>{pendientes}</strong>{' '}
             {pendientes === 1 ? 'lote pendiente' : 'lotes pendientes'} de
-            evaluación en el panel.
+            evaluación en la vista actual.
           </p>
         </aside>
       )}
@@ -211,13 +309,20 @@ function PanelLotes() {
       <div className="management-grid">
         <section className="panel-card" aria-labelledby="form-titulo">
           <div className="panel-card__head">
-            <h2 id="form-titulo">Registrar lote</h2>
-            <span className="badge badge--neutral">Alta</span>
+            <h2 id="form-titulo">
+              {loteEnEdicion ? 'Editar lote' : 'Registrar lote'}
+            </h2>
+            <span className="badge badge--neutral">
+              {loteEnEdicion ? 'PATCH' : 'POST'}
+            </span>
           </div>
           <LoteForm
+            key={loteEnEdicion?.id ?? 'nuevo'}
             onGuardar={guardarLote}
-            fundos={fundosIniciales}
+            fundos={fundos}
             codigosExistentes={lotes.map((lote) => lote.codigo_lote)}
+            loteEnEdicion={loteEnEdicion}
+            onCancelarEdicion={() => setLoteEnEdicion(null)}
           />
         </section>
 
@@ -226,8 +331,7 @@ function PanelLotes() {
           onBusquedaChange={setBusqueda}
           estado={filtroEstado}
           onEstadoChange={setFiltroEstado}
-          resultados={lotesFiltrados.length}
-          total={lotes.length}
+          resultados={lotes.length}
           onLimpiar={limpiarFiltros}
         />
       </div>
@@ -238,19 +342,58 @@ function PanelLotes() {
           <h2>Lotes del periodo</h2>
         </div>
         <span className="record-count">
-          {lotesFiltrados.length} de {lotes.length} lotes
+          {cargando ? 'Cargando...' : `${lotes.length} lotes en la vista`}
         </span>
       </section>
 
-      <LoteList
-        lotes={lotesFiltrados}
-        onCambiarEstado={cambiarEstado}
-        onEliminar={eliminarLote}
-      />
+      {cargando && lotes.length === 0 && (
+        <div className="empty-state" role="status">
+          <span aria-hidden="true">…</span>
+          <p>Cargando...</p>
+          <small>Consultando GET /api/lotes-detallados/</small>
+        </div>
+      )}
+
+      {!cargando && error && (
+        <div className="empty-state" role="alert">
+          <span aria-hidden="true">!</span>
+          <p>{error}</p>
+          <small>
+            Enciende Django con <code>python manage.py runserver</code> y pulsa
+            recargar.
+          </small>
+          <button
+            type="button"
+            className="button button--secondary button--sm"
+            onClick={() => setRecarga((valor) => valor + 1)}
+            style={{ marginTop: '12px' }}
+          >
+            Recargar
+          </button>
+        </div>
+      )}
+
+      {!cargando && !error && lotes.length === 0 && (
+        <div className="empty-state" role="status">
+          <span aria-hidden="true">∅</span>
+          <p>No hay lotes que coincidan con la búsqueda.</p>
+          <small>Cambia el texto, el estado o registra un lote nuevo.</small>
+        </div>
+      )}
+
+      {!error && lotes.length > 0 && (
+        <LoteList
+          lotes={lotes}
+          onCambiarEstado={cambiarEstado}
+          onEliminar={eliminarLote}
+          onEditar={setLoteEnEdicion}
+        />
+      )}
 
       <p className="module-note">
-        Los datos son mock y reproducen la estructura JSON de la API de la
-        Semana 8. El consumo real de endpoints se realizará en la Semana 12.
+        Búsqueda y filtro viajan juntos:{' '}
+        <code>{'params: { search, estado }'}</code>. Los datos se normalizan con{' '}
+        <code>Number()</code> antes de calcular el resumen.
       </p>
     </div>
   )

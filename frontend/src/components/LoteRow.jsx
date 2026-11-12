@@ -5,11 +5,11 @@ import {
   formatearFecha,
 } from './loteUtils.js'
 
-function LoteRow({ lote, onCambiarEstado, onEliminar }) {
+function LoteRow({ lote, onCambiarEstado, onEliminar, onEditar }) {
   // La fila no modifica la lista: solo avisa al padre con las funciones
   // recibidas por props.
   return (
-    <tr>
+    <tr data-lote-id={lote.id} data-codigo={lote.codigo_lote}>
       <td data-label="Lote / Fundo">
         <strong>{lote.codigo_lote}</strong>
         <span className="cell-sub">{lote.fundo.nombre_fundo}</span>
@@ -32,6 +32,13 @@ function LoteRow({ lote, onCambiarEstado, onEliminar }) {
       </td>
       <td data-label="Acciones">
         <div className="row-actions">
+          <button
+            type="button"
+            className="button button--ghost button--sm"
+            onClick={() => onEditar(lote)}
+          >
+            Editar
+          </button>
           <button
             type="button"
             className="button button--secondary button--sm"

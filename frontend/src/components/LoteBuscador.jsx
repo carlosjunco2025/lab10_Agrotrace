@@ -4,7 +4,6 @@ function LoteBuscador({
   estado,
   onEstadoChange,
   resultados,
-  total,
   onLimpiar,
 }) {
   const filtrosActivos = busqueda !== '' || estado !== ''
@@ -13,13 +12,11 @@ function LoteBuscador({
     <section className="panel-card filter-panel" aria-labelledby="filtro-titulo">
       <div className="panel-card__head">
         <h2 id="filtro-titulo">Buscar y filtrar</h2>
-        <span className="badge badge--neutral">
-          {resultados} de {total}
-        </span>
+        <span className="badge badge--neutral">{resultados} resultados</span>
       </div>
 
       <label className="field">
-        <span>Texto (código, fundo o estado)</span>
+        <span>Texto (código de lote o fundo)</span>
         <input
           type="search"
           value={busqueda}
@@ -51,6 +48,11 @@ function LoteBuscador({
       >
         Limpiar filtros
       </button>
+
+      <p className="module-note">
+        Los filtros se envían juntos al servidor:{' '}
+        <code>{'?search=...&estado=...'}</code>
+      </p>
     </section>
   )
 }
